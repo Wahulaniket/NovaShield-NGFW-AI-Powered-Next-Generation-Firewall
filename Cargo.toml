@@ -1,0 +1,6 @@
+[workspace]
+members = ["backend", "gateway", "shared"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"

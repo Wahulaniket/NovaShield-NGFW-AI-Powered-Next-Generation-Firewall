@@ -1,0 +1,75 @@
+# Rust build artifacts
+/target/
+**/target/
+**/*.rs.bk
+**/*.rs.orig
+**/*.rs.rej
+
+# Python cache and environment
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyproj
+*.env
+.venv/
+venv/
+ENV/
+env/
+
+# Python packaging and artifacts
+*.egg-info/
+*.egg
+build/
+dist/
+*.whl
+
+# Node / JavaScript dependencies
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+pnpm-lock.yaml
+
+# Vite build output
+/dist/
+/build/
+
+# Docker and local environment
+.DS_Store
+*.log
+.env
+docker-compose.override.yml
+
+# IDE/project files
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Coverage and test output
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+
+# Generated model artifacts
+ai_engine/model/dataset/
+ai_engine/model/dataset.zip
+ai_engine/model/models/
+ai_engine/model/*.pkl
+ai_engine/model/*.joblib
+
+# Temporary or OS files
+*.tmp
+*.temp
+*~
+Thumbs.db
+
+# Exclude Rust incremental build state too
+**/incremental/

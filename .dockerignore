@@ -1,0 +1,33 @@
+# Build artifacts
+target/
+dashboard/node_modules/
+dashboard/dist/
+ai_engine/venv/
+ai_engine/__pycache__/
+ai_engine/model/dataset/
+ai_engine/model/dataset.zip
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+.dockerignore
+
+# Test scripts
+tests/
+
+# Documentation
+*.md
+*.txt
+tech_stack.txt

@@ -1,0 +1,29 @@
+[package]
+name = "gateway"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+arc-swap = "1"
+axum = { version = "0.8", features = ["json", "macros", "ws"] }
+axum-server = { version = "0.8", features = ["tls-rustls"] }
+chrono = { version = "0.4", features = ["serde"] }
+dashmap = "6"
+futures-util = "0.3"
+http = "1"
+jsonwebtoken = "9"
+percent-encoding = "2"
+prometheus = "0.13"
+redis = { version = "0.27", features = ["tokio-comp", "aio"] }
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rustls = { version = "0.23", features = ["ring"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+shared = { path = "../shared" }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+uuid = { version = "1", features = ["serde", "v7"] }

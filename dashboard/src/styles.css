@@ -1,0 +1,261 @@
+:root {
+  color-scheme: dark;
+  --bg: #07141c;
+  --panel: rgba(10, 29, 40, 0.82);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --text: #f2f7f5;
+  --muted: #c8d5d1;
+  --good: #1b998b;
+  --warn: #ff9f1c;
+  --bad: #ef476f;
+  --cool: #118ab2;
+  --ai: #a855f7;
+  --shadow: 0 25px 80px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(17, 138, 178, 0.28), transparent 32%),
+    radial-gradient(circle at right, rgba(239, 71, 111, 0.18), transparent 25%),
+    linear-gradient(180deg, #031017 0%, #07141c 55%, #091820 100%);
+}
+
+.shell {
+  width: min(1400px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 28px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #83c5be;
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+.hero h1 {
+  font-size: clamp(36px, 5vw, 68px);
+  line-height: 0.95;
+  margin: 0;
+}
+
+.lead {
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.status-pill {
+  padding: 10px 16px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 12px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.status-live {
+  color: #83f3cf;
+}
+
+.status-reconnecting,
+.status-connecting {
+  color: #ffd166;
+}
+
+.status-error {
+  color: #ff7b9c;
+}
+
+.card-grid,
+.visual-grid,
+.tables {
+  display: grid;
+  gap: 18px;
+}
+
+.card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin-bottom: 18px;
+}
+
+.visual-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.tables {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric-card,
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.metric-card {
+  padding: 20px;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.metric-card span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.metric-card strong {
+  font-size: 34px;
+}
+
+.accent-good strong {
+  color: var(--good);
+}
+
+.accent-bad strong {
+  color: var(--bad);
+}
+
+.accent-warn strong {
+  color: var(--warn);
+}
+
+.accent-cool strong {
+  color: var(--cool);
+}
+
+.accent-ai strong {
+  color: var(--ai);
+}
+
+.panel {
+  padding: 20px;
+}
+
+.wide {
+  grid-column: span 2;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 16px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.panel-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.log-list {
+  display: grid;
+  gap: 12px;
+  max-height: 460px;
+  overflow: auto;
+}
+
+.log-item {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 6px;
+}
+
+.log-item strong {
+  font-size: 14px;
+}
+
+.log-item span,
+.log-item small {
+  color: var(--muted);
+}
+
+.log-item.allowed {
+  border-color: rgba(27, 153, 139, 0.35);
+}
+
+.log-item.blocked,
+.log-item.danger {
+  border-color: rgba(239, 71, 111, 0.35);
+}
+
+.log-item.ai_blocked {
+  border-color: rgba(168, 85, 247, 0.45);
+  background: rgba(168, 85, 247, 0.06);
+}
+
+.log-item.rate_limited {
+  border-color: rgba(255, 159, 28, 0.35);
+}
+
+.log-item.auth_failed {
+  border-color: rgba(17, 138, 178, 0.35);
+}
+
+@media (max-width: 1100px) {
+  .card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .visual-grid,
+  .tables {
+    grid-template-columns: 1fr;
+  }
+
+  .wide {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    width: min(100vw - 20px, 1400px);
+    padding-top: 20px;
+  }
+
+  .hero {
+    flex-direction: column;
+  }
+
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero h1 {
+    font-size: 40px;
+  }
+}

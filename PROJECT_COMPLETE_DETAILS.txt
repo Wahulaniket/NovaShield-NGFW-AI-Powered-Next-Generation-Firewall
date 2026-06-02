@@ -1,0 +1,503 @@
+NovaShield Final Product - Complete Project Technical Guide
+=========================================================
+
+Purpose of this document
+------------------------
+This file is a full, interview-ready explanation of the project so you can answer jury/interviewer questions confidently.
+It explains:
+- what the project does
+- complete architecture and data flow
+- full tech stack
+- AI model details (training + inference)
+- all major attacks covered and how they are blocked
+- where each file/folder is used
+- how to run and test the project end-to-end
+- what to say in viva for common deep questions
+
+
+1) Project Summary
+------------------
+Project name: NovaShield AI-Powered Next-Generation Firewall
+
+What it is:
+- A security gateway in front of a backend banking API.
+- It inspects incoming traffic using layered defenses:
+  1. IP blacklist
+  2. WAF regex attack detection
+  3. per-route rate limiting
+  4. JWT authentication and admin RBAC
+  5. AI threat classification service
+- It forwards safe traffic to backend and blocks malicious traffic.
+- A React dashboard streams live logs, counters, events, and blacklisted IPs.
+
+Main value proposition:
+- Combines rule-based security + ML-based threat detection + observability in one full-stack system.
+
+
+2) High-Level Architecture
+--------------------------
+Client/User
+   -> Gateway (Rust, Axum) [port 8080 HTTP, optional 8443 TLS]
+      -> Backend (Rust, Axum) [port 8081]
+      -> AI Engine (Python FastAPI) [port 8000]
+      -> Redis (optional persistent storage) [port 6379]
+   -> Dashboard (React) [dev: 5173, prod: 80]
+
+Runtime services in docker-compose:
+- redis
+- ai_engine
+- backend
+- gateway
+- dashboard
+
+Gateway is the security brain:
+- receives all API traffic
+- validates/blocks/forwards
+- records telemetry
+- pushes live events over WebSocket
+
+
+3) Request/Data Flow (Exact)
+----------------------------
+3.1 Login flow (/api/login)
+- Client sends username/password to gateway.
+- Gateway extracts client IP and creates request context with request_id.
+- Gateway runs security::inspect_common:
+  - blacklist check
+  - WAF pattern check on path/body
+  - login route rate limit check
+- If rejected -> 403/429 with structured error.
+- If passed -> gateway calls AI engine /predict.
+- AI decision:
+  - block => gateway returns 403 AI_BLOCKED
+  - allow/fallback => forwards request to backend /login
+- Backend issues JWT token (HS256) and returns token + account id.
+- Gateway logs decision and latency.
+
+3.2 Protected routes (/api/balance, /api/transfer)
+- Same checks as above + JWT verification at gateway before forwarding.
+- For /transfer, gateway inspects request body for WAF payloads.
+- If JWT invalid => 401
+- If user is valid => forwarded to backend.
+
+3.3 Admin routes
+- /api/admin/snapshot
+- /api/admin/logs
+- /api/admin/metrics
+- /api/admin/blacklist/add
+- /api/admin/blacklist/remove
+
+All admin routes require valid JWT + role=admin (enforced in gateway verify_admin_jwt).
+
+3.4 Dashboard live flow
+- Dashboard loads snapshot from /api/admin/snapshot.
+- Opens WebSocket /ws/live.
+- Receives event stream:
+  - snapshot
+  - request_log
+  - security_event
+  - system_notice
+- UI charts and counters update in real-time.
+
+
+4) Security Layers and How Attacks Are Prevented
+-------------------------------------------------
+4.1 IP Blacklist
+- Stored in gateway in DashMap.
+- Seeded from config on startup.
+- Can be changed at runtime through admin endpoints.
+- If IP is blacklisted -> request blocked (403 BLOCKED_IP).
+
+4.2 WAF Rules (Regex)
+Implemented in gateway/src/security.rs via WafEngine.
+
+Rules:
+- SQLi:
+  - (or/and ... = ...)
+  - union select, drop table, sleep(), --
+- XSS:
+  - <script, onerror=, onload=, javascript:
+- Path traversal:
+  - ../, /etc/passwd, boot.ini
+- Command injection:
+  - | cat/sh/bash, ; curl/wget, && cat/curl/wget
+
+When matched:
+- Gateway returns 403 with rule-specific code (WAF_SQLI / WAF_XSS / WAF_TRAVERSAL / WAF_COMMAND).
+- Security event recorded.
+- For critical WAF rule types, IP may be promoted to blacklist automatically.
+
+4.3 Rate Limiting
+- Sliding fixed window per route key for 60 seconds.
+- Route-specific limits from config:
+  - login_per_minute = 5
+  - transfer_per_minute = 20
+  - balance_per_minute = 120
+  - default_per_minute = 600
+- If exceeded -> 429 RATE_LIMITED with headers:
+  - Retry-After
+  - X-RateLimit-Limit
+  - X-RateLimit-Remaining
+
+4.4 JWT Auth + RBAC
+- JWT algorithm: HS256
+- Gateway validates token for protected routes.
+- Admin routes require role="admin".
+- Backend assigns admin role to usernames: admin, root, superadmin.
+
+4.5 AI Threat Enforcement
+- Gateway sends metadata (ip, path, method, user_agent) to AI engine /predict.
+- AI engine predicts label from model.
+- Decision rule:
+  - label == BENIGN => allow
+  - else => block
+- Gateway behavior:
+  - block => 403 AI_BLOCKED
+  - allow => continue
+  - AI unavailable/timeout/invalid response => fallback allow (fail-open, availability-first)
+
+
+5) AI/ML Details (Very Important for Viva)
+-------------------------------------------
+5.1 Model type
+- RandomForestClassifier (scikit-learn)
+
+5.2 Training dataset
+- CICIDS2017 derived data under ai_engine/model/dataset
+- cleaned dataset file: ai_engine/model/dataset/cleaned.csv
+- raw day-wise CICIDS files are also present.
+
+5.3 Feature handling
+- Training uses all columns except Label.
+- Inference feature order saved in features.pkl.
+- Runtime aligns input vectors exactly to saved feature list.
+
+5.4 Preprocessing
+- Replace inf/-inf with 0
+- Drop NaN rows
+- Trim column names
+- Label normalization for inconsistent web attack strings
+- LabelEncoder encodes text labels
+- StandardScaler scales feature matrix
+
+5.5 Train/test split
+- train_test_split with:
+  - test_size=0.2
+  - random_state=42
+  - stratify=y
+
+5.6 Random Forest hyperparameters
+From ai_engine/model/retrain_model.py:
+- n_estimators = 120
+- max_depth = 20
+- random_state = 42
+- n_jobs = 1
+- class_weight = "balanced_subsample"
+
+5.7 Saved artifacts
+- model.pkl
+- scaler.pkl
+- features.pkl
+- label_encoder.pkl
+
+5.8 Inference output
+- label (class name)
+- confidence (if predict_proba available)
+- predicted_class (optional)
+- gateway uses decision = allow only when label BENIGN else block.
+
+5.9 AI API endpoints
+- GET /health
+- POST /predict
+- POST /predict/batch
+- docs: /docs
+
+5.10 Additional feature extraction module
+- ai_engine/feature_extractor.py can sniff packets via Scapy and build flow features.
+- Uses timeout/packet trigger and optional rate guard.
+- This module is useful for packet-flow simulation and offline experiments.
+- Current gateway->AI path uses request metadata, not live packet sniffing directly.
+
+
+6) Observability and Monitoring
+-------------------------------
+Gateway tracks:
+- total_requests
+- allowed_requests
+- blocked_requests
+- rate_limited_requests
+- auth_failures
+- upstream_errors
+- active_websockets
+- ai_blocked_requests
+
+Prometheus endpoint:
+- /api/admin/metrics
+
+Live event stream:
+- /ws/live
+
+Dashboard panels:
+- latency and block timeline
+- traffic mix pie chart
+- status trend area chart
+- security events list
+- blacklist table
+- request log stream
+
+
+7) Redis Usage
+--------------
+Redis is optional but enabled by config.
+If unavailable, gateway falls back to in-memory storage.
+
+Used for:
+- persistent blacklist hash
+- rate-limit counters (helper functions exist)
+- recent log list
+
+Key patterns:
+- nova:blacklist
+- nova:rate:{ip}:{route}
+- nova:logs
+
+
+8) Folder-by-Folder and File-by-File Purpose
+---------------------------------------------
+8.1 Root
+- Cargo.toml: Rust workspace (backend, gateway, shared).
+- Cargo.lock: lockfile.
+- docker-compose.yml: full multi-service deployment.
+- tech_stack.txt: previous project technical summary.
+
+8.2 config/
+- gateway.json: local gateway runtime config.
+- gateway_test.json: test mode gateway config (port 8090 etc).
+- gateway.docker.json: container networking config (service DNS names).
+- backend.json: local backend config.
+- backend.docker.json: backend container config.
+
+8.3 gateway/
+- Cargo.toml: gateway dependencies.
+- Dockerfile: multi-stage Rust build + runtime image.
+- src/main.rs: startup, config loading, TLS mode, server launch.
+- src/config.rs: gateway config structs + env overrides.
+- src/state.rs: shared app state, HTTP client, blacklist, redis init.
+- src/security.rs: WAF, rate limit, JWT checks, guard failures.
+- src/auth.rs: bearer token parsing and JWT decode.
+- src/ai_client.rs: AI engine HTTP client and decision mapping.
+- src/proxy.rs: all routes, enforcement chain, upstream proxy logic, websocket.
+- src/metrics.rs: counters, event stream, snapshot, Prometheus rendering.
+- src/redis_store.rs: Redis blacklist/rate/log helper methods.
+
+8.4 backend/
+- Cargo.toml: backend dependencies.
+- Dockerfile: Rust backend build/runtime.
+- src/main.rs: /health, /login, /balance, /transfer.
+- src/config.rs: backend config + env override.
+
+8.5 shared/
+- Cargo.toml: shared crate deps.
+- src/lib.rs: common request/response structs, JWT claims, events enums.
+
+8.6 ai_engine/
+- requirements.txt: Python dependencies.
+- Dockerfile: FastAPI container image.
+- main.py: FastAPI app, schemas, /predict endpoints.
+- model.py: model artifact loading + inference APIs.
+- feature_extractor.py: packet sniff + flow feature generation.
+- tests/test_predict.py: unit tests for model inference paths.
+
+8.7 ai_engine/model/
+- retrain_model.py: training pipeline and artifact export.
+- test_model.py: evaluation script with report/confusion matrix.
+- test_allow_block.py: quick 10 benign + 10 attack decision check.
+- train.ipynb: notebook training workflow (if used).
+- models/*: saved ML artifacts.
+- dataset/*: CICIDS files and cleaned.csv.
+
+8.8 dashboard/
+- package.json: React/Vite/Recharts dependencies.
+- vite.config.js: dev server + proxy to gateway + ws proxy.
+- index.html: app mount template.
+- src/main.jsx: React bootstrap.
+- src/App.jsx: dashboard logic and live updates.
+- src/styles.css: UI styling.
+- nginx.conf: production reverse proxy + static serving + ws upgrade.
+- Dockerfile: node build stage + nginx serve stage.
+
+8.9 tests/
+- common.ps1: helper functions (HTTP call, assertions, auth headers).
+- run-all.ps1: core smoke suite orchestrator.
+- 01-health.ps1: gateway health endpoint test.
+- 02-login.ps1: login + token check.
+- 03-auth-flow.ps1: login -> balance -> transfer flow.
+- 04-security.ps1: missing JWT + SQLi + XSS + traversal + blacklist tests.
+- 05-rate-limit.ps1: verifies 5 login success then 429 and reset.
+- 06-load.ps1: high volume load test harness.
+- 07-metrics.ps1: snapshot + metrics endpoint checks.
+- 08-websocket.ps1: live feed message reading.
+- 09-ai-enforcement.ps1: AI health and direct/pipeline checks.
+- integration_test.py: end-to-end Python integration suite.
+
+
+9) Ports and Endpoints
+----------------------
+Gateway:
+- 8080 HTTP
+- 8443 HTTPS (optional TLS)
+
+Backend:
+- 8081
+
+AI engine:
+- 8000
+
+Redis:
+- 6379
+
+Dashboard:
+- dev 5173
+- docker/nginx 80
+
+Gateway APIs:
+- POST /api/login
+- GET /api/balance
+- POST /api/transfer
+- GET /api/admin/health
+- GET /api/admin/snapshot
+- GET /api/admin/logs
+- GET /api/admin/metrics
+- POST /api/admin/blacklist/add
+- POST /api/admin/blacklist/remove
+- WS /ws/live
+
+AI APIs:
+- GET /
+- GET /health
+- POST /predict
+- POST /predict/batch
+- GET /docs
+
+Backend APIs:
+- GET /health
+- POST /login
+- GET /balance
+- POST /transfer
+
+
+10) How to Run
+--------------
+Option A: Docker full stack
+- docker compose up --build
+
+Option B: Manual local
+1. Start backend
+   cargo run -p backend
+2. Start gateway
+   cargo run -p gateway
+3. Start AI engine
+   cd ai_engine
+   pip install -r requirements.txt
+   uvicorn main:app --host 0.0.0.0 --port 8000
+4. Start dashboard
+   cd dashboard
+   npm install
+   npm run dev
+
+
+11) How to Test Attacks and Explain Prevention
+----------------------------------------------
+11.1 Automated PowerShell tests
+- powershell -ExecutionPolicy Bypass -File .\tests\run-all.ps1
+- powershell -ExecutionPolicy Bypass -File .\tests\04-security.ps1
+- powershell -ExecutionPolicy Bypass -File .\tests\05-rate-limit.ps1
+- powershell -ExecutionPolicy Bypass -File .\tests\09-ai-enforcement.ps1
+
+11.2 Example manual SQLi test
+- POST /api/login with username "admin OR 1=1"
+Expected: 403 from WAF rule.
+
+11.3 Example XSS test
+- GET /api/balance?q=<script>alert(1)</script>
+Expected: 403 from WAF XSS rule.
+
+11.4 Example path traversal test
+- GET /api/balance?file=../../../../etc/passwd
+Expected: 403 from traversal rule.
+
+11.5 Rate limit test
+- 8 login requests from same IP in under 60s.
+Expected: first 5 success, then 429.
+
+11.6 Blacklist test
+- Send X-Real-IP as blacklisted IP (203.0.113.10).
+Expected: 403 BLOCKED_IP.
+
+11.7 AI decision test
+- Direct call to AI /predict with metadata.
+Expected: allow/block decision and label.
+- Through gateway, non-BENIGN label triggers AI_BLOCKED 403.
+
+
+12) Important Design Choices (Interview Talking Points)
+--------------------------------------------------------
+- Rust chosen for gateway/backend for performance and memory safety.
+- Rule-based + AI hybrid gives both explainability (WAF rules) and adaptive detection (ML).
+- Shared Rust crate prevents payload schema drift between services.
+- Fail-open on AI timeout preserves service availability.
+- WebSocket + Prometheus provide real-time and historical observability.
+- Config-driven controls (rate limits, blacklist, AI toggle, timeouts).
+
+
+13) Known Limitations / Honest Answers for Jury
+------------------------------------------------
+- AI service currently uses pre-trained classical ML, not online continuous learning.
+- AI input from gateway is metadata-only; full packet feature extraction path is separate module.
+- Redis rate-limit helper exists but in-memory limiter is primary path in current gateway flow.
+- Backend is a mock banking API with in-memory balances (non-persistent).
+- JWT uses shared secret (HS256); production may prefer key rotation/strong secret management.
+- WAF regex signatures can have false positives/false negatives and need tuning.
+
+
+14) Security Hardening Suggestions (If Asked)
+---------------------------------------------
+- Enforce HTTPS only and HSTS.
+- Rotate secrets via vault/KMS and environment injection.
+- Persist balances in DB with transaction integrity.
+- Add mTLS/service auth between gateway and AI engine/backend.
+- Add request signing and stricter admin endpoint audit trails.
+- Add model drift monitoring and periodic retraining pipeline.
+- Add canary mode for new WAF/AI rules before hard block.
+
+
+15) Quick Viva Q&A Cheat Sheet
+------------------------------
+Q: Which ML model is used?
+A: RandomForestClassifier with n_estimators=120, max_depth=20, class_weight=balanced_subsample, trained on CICIDS2017 cleaned dataset.
+
+Q: How does AI block work in gateway?
+A: Gateway calls AI /predict; if returned label is not BENIGN, gateway responds 403 AI_BLOCKED and logs a critical security event.
+
+Q: What if AI engine is down?
+A: Gateway uses fail-open fallback allow (AiDecision::Fallback) to prevent single-point-of-failure outages.
+
+Q: How do you stop SQL injection/XSS?
+A: WAF regex inspection on path and body before proxying. Matching payload is rejected with 403 and event logged.
+
+Q: How is rate limit implemented?
+A: Per-IP, per-route 60-second window in gateway DashMap; route limits from config. 429 includes retry-after and limit headers.
+
+Q: How do you monitor system health?
+A: Admin snapshot/log endpoints, Prometheus metrics endpoint, and live WebSocket event stream consumed by React dashboard.
+
+Q: What are main technologies used?
+A: Rust (Axum/Tokio), Python (FastAPI/scikit-learn), React+Vite+Recharts, Redis, Docker Compose.
+
+
+16) Exact Date Context for Presentation
+---------------------------------------
+This document reflects repository state inspected on: 2026-05-05.
+
+
+End of document.

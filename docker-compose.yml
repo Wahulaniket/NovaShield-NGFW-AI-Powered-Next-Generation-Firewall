@@ -1,0 +1,124 @@
+###############################################################################
+# NovaShield AI-Powered Next-Generation Firewall
+# Docker Compose — Full Stack Deployment
+###############################################################################
+
+services:
+  # ── Redis — Persistent storage for blacklists, rate limits, logs ──────────
+  redis:
+    image: redis:7-alpine
+    container_name: nova-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - nova-net
+
+  # ── AI Engine — ML threat classification (FastAPI + scikit-learn) ──────────
+  ai_engine:
+    build:
+      context: ./ai_engine
+      dockerfile: Dockerfile
+    container_name: nova-ai-engine
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - nova-net
+
+  # ── Backend — Mock banking API (Rust/Axum) ────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: nova-backend
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - RUST_LOG=backend=info
+      - NOVA_JWT_SECRET=${NOVA_JWT_SECRET:-novashield-production-secret-change-me}
+      - NOVA_CONFIG_PATH=config/backend.json
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - nova-net
+
+  # ── Gateway — Security gateway (WAF + AI + Auth + Rate Limit) ─────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: nova-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    environment:
+      - RUST_LOG=gateway=info
+      - NOVA_JWT_SECRET=${NOVA_JWT_SECRET:-novashield-production-secret-change-me}
+      - NOVA_BACKEND_URL=http://backend:8081
+      - NOVA_AI_ENGINE_URL=http://ai_engine:8000
+      - NOVA_REDIS_URL=redis://redis:6379
+      - NOVA_AI_ENABLED=true
+      - NOVA_CONFIG_PATH=config/gateway.json
+    depends_on:
+      redis:
+        condition: service_healthy
+      ai_engine:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/admin/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - nova-net
+
+  # ── Dashboard — React monitoring UI (nginx) ───────────────────────────────
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: nova-dashboard
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - nova-net
+
+volumes:
+  redis_data:
+
+networks:
+  nova-net:
+    driver: bridge

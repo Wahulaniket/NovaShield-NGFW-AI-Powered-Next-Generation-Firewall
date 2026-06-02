@@ -1,0 +1,40 @@
+{
+  "listen_addr": "0.0.0.0:8090",
+  "tls_listen_addr": "0.0.0.0:8443",
+  "backend_base_url": "http://127.0.0.1:8081",
+  "request_timeout_ms": 5000,
+  "dashboard_history_limit": 400,
+  "max_inspection_body_bytes": 8192,
+  "websocket_ping_interval_secs": 20,
+  "jwt_secret": "change-me-for-production",
+  "ai_engine_url": "http://127.0.0.1:8000",
+  "ai_timeout_ms": 500,
+  "ai_enabled": true,
+  "redis_url": "redis://127.0.0.1:6379",
+  "tls": {
+    "enabled": false,
+    "cert_path": "certs/cert.pem",
+    "key_path": "certs/key.pem"
+  },
+  "rate_limits": {
+    "default_per_minute": 600,
+    "login_per_minute": 5,
+    "transfer_per_minute": 20,
+    "balance_per_minute": 120
+  },
+  "blacklist": [
+    {
+      "ip": "203.0.113.10",
+      "reason": "manual fraud watchlist"
+    },
+    {
+      "ip": "198.51.100.20",
+      "reason": "repeated malicious probing"
+    }
+  ],
+  "upstream": {
+    "max_idle_per_host": 256,
+    "pool_idle_timeout_secs": 90
+  }
+}
+

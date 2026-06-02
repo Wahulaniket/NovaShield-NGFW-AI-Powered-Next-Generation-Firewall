@@ -1,0 +1,6 @@
+{
+  "listen_addr": "0.0.0.0:8081",
+  "jwt_secret": "change-me-for-production",
+  "token_ttl_secs": 3600,
+  "issuer": "nova-shield-backend"
+}

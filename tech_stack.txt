@@ -1,0 +1,131 @@
+Project Deep Analysis (NovaShield)
+
+What this project is
+This is a security-focused API gateway demo with a live monitoring dashboard.
+It has 3 runtime components:
+gateway (Rust): security checks, rate limiting, proxying, metrics, WebSocket feed.
+backend (Rust): mock banking API (login, balance, transfer).
+dashboard (React): real-time security and traffic visualization.
+Core shared models are in: shared/src/lib.rs
+Architecture and request flow
+Client calls gateway at :8080 (/api/*).
+Gateway runs WAF + blacklist + rate-limit + JWT checks, then forwards allowed calls to backend :8081.
+Gateway records logs/security events/counters and streams live updates to dashboard via /ws/live.
+Dashboard fetches snapshot first, then keeps updating from WebSocket events.
+Main gateway routes: gateway/src/proxy.rs
+Backend routes: backend/src/main.rs
+Tech stack (where used, why used, what happens after use, and alternatives not used)
+Rust + Tokio + Axum (backend/gateway):
+
+Where: gateway/Cargo.toml, backend/Cargo.toml
+
+Why: high-performance async networking + strong type safety for gateway/security logic.
+
+After use: requests are handled concurrently with low overhead.
+
+Why not Node/Express/Spring (inference): those are faster for prototyping, but this project prioritizes systems-level performance/control.
+
+Reqwest + Rustls (gateway upstream + optional TLS):
+
+Where: gateway/src/state.rs, gateway/src/main.rs
+
+Why: robust HTTP client and modern TLS in Rust ecosystem.
+
+After use: gateway pools connections, enforces timeout, optionally serves HTTPS on :8443.
+
+Why not OpenSSL stack (inference): Rustls reduces OpenSSL dependency complexity.
+
+JWT (jsonwebtoken)
+
+Where: backend/src/main.rs, gateway/src/auth.rs
+
+Why: stateless auth between client and API.
+
+After use: login issues token; protected routes verify token expiry/signature.
+
+Why not session store (inference): no server-side session infra required.
+
+WAF + Regex rules
+
+Where: gateway/src/security.rs
+
+Why: block SQLi/XSS/traversal/command-injection patterns quickly.
+
+After use: malicious requests return 403, security events are emitted, some rules auto-promote IP to blacklist.
+
+Why not ModSecurity/managed WAF (inference): this is app-embedded and demo-friendly, not external infra.
+
+DashMap + ArcSwap + atomics
+
+Where: gateway/src/state.rs, gateway/src/metrics.rs
+
+Why: lock-efficient concurrent runtime state.
+
+After use: high-concurrency counters, blacklist, and rate windows.
+
+Why not single Mutex<HashMap> (inference): would serialize access and reduce throughput.
+
+Prometheus metrics
+
+Where: gateway/src/metrics.rs, /api/admin/metrics in gateway/src/proxy.rs
+
+Why: standard observability format.
+
+After use: external scrapers can ingest gateway counters.
+
+Why not logs-only (inference): metrics are better for monitoring/alerts.
+
+React 19 + Vite + Recharts
+
+Where: dashboard/package.json, dashboard/src/App.jsx
+
+Why: fast UI dev server and charting for live telemetry.
+
+After use: charts/cards/log panels update from WebSocket.
+
+Why not plain HTML or heavy enterprise dashboard frameworks (inference): React+Vite is quick and modern for this scope.
+
+PowerShell end-to-end test scripts
+
+Where: tests
+
+Why: easy black-box validation on Windows (health, auth, WAF, rate limits, metrics, load, websocket).
+
+After use: confirms behavior across full stack.
+
+Why not Rust integration tests only (inference): these scripts test live deployed endpoints and headers more directly.
+
+Important behavior details
+Rate limits are route-specific (login, transfer, balance) from config.
+Blacklist is seeded from config and mutable at runtime via admin endpoints.
+Admin endpoints currently appear unauthenticated (/api/admin/*) so treat as non-production.
+Backend data is in-memory only (balances reset on restart).
+Default JWT secret is placeholder in config; must be changed for real deployment.
+Config files: config/gateway.json, config/backend.json
+How to run this project
+Prerequisites:
+Rust toolchain with Edition 2024 support.
+Node.js + npm (modern version).
+PowerShell (for test scripts).
+Start backend (from repo root):
+cargo run -p backend
+Start gateway (new terminal, from repo root):
+cargo run -p gateway
+Start dashboard (new terminal):
+cd dashboard
+npm install
+npm run dev
+Open dashboard:
+http://127.0.0.1:5173
+Vite proxies /api and /ws/live to gateway automatically.
+Quick API checks:
+Invoke-RestMethod http://127.0.0.1:8080/api/admin/health
+Run core tests:
+powershell -ExecutionPolicy Bypass -File .\tests\run-all.ps1
+Optional extra tests:
+powershell -ExecutionPolicy Bypass -File .\tests\08-websocket.ps1
+powershell -ExecutionPolicy Bypass -File .\tests\06-load.ps1 -TotalRequests 15000
+Validation I executed now
+cargo check --workspace passed.
+npm run build in dashboard/ passed.
+If you want, I can next give you a full “production-hardening checklist” for this exact codebase (auth on admin APIs, secret management, persistence, TLS-only mode, and safer WAF tuning).
